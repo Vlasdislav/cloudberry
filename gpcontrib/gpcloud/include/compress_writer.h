@@ -6,6 +6,7 @@
 #include "s3macros.h"
 #include "writer.h"
 
+
 // 2MB by default
 extern uint64_t S3_ZIP_COMPRESS_CHUNKSIZE;
 
