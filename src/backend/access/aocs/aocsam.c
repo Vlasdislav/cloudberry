@@ -64,6 +64,7 @@ static void reorder_qual_col(AOCSScanDesc scan);
 static bool aocs_col_predicate_test(AOCSScanDesc scan, TupleTableSlot *slot, int i, bool sample_phase);
 static bool aocs_getnext_sample(AOCSScanDesc scan, ScanDirection direction, TupleTableSlot *slot);
 static void aocs_insert_finish_guts(AOCSInsertDesc aoInsertDesc);
+static void close_cur_scan_seg(AOCSScanDesc scan);
 
 /* Hook for plugins to get control in aocs_delete() */
 aocs_delete_hook_type aocs_delete_hook = NULL;
@@ -72,7 +73,7 @@ aocs_delete_hook_type aocs_delete_hook = NULL;
  * Open the segment file for a specified column associated with the datum
  * stream.
  */
-static void
+static bool
 open_datumstreamread_segfile(
 							 char *basepath, Relation rel,
 							 AOCSFileSegInfo *segInfo,
@@ -94,8 +95,8 @@ open_datumstreamread_segfile(
 	Assert(strlen(fn) + 1 <= MAXPGPATH);
 
 	Assert(ds);
-	datumstreamread_open_file(ds, fn, e->eof, e->eof_uncompressed, node,
-							  fileSegNo, segInfo->formatversion);
+	return datumstreamread_open_file(ds, fn, e->eof, e->eof_uncompressed, node,
+									 fileSegNo, segInfo->formatversion);
 }
 
 /*
@@ -107,7 +108,7 @@ open_datumstreamread_segfile(
  * If blockDirectory is not NULL, the first block info is written to
  * the block directory.
  */
-static void
+static bool
 open_all_datumstreamread_segfiles(AOCSScanDesc scan, AOCSFileSegInfo *segInfo)
 {
 	Relation 		rel = scan->rs_base.rs_rd;
@@ -123,18 +124,32 @@ open_all_datumstreamread_segfiles(AOCSScanDesc scan, AOCSFileSegInfo *segInfo)
 		AttrNumber	attno = proj_atts[i];
 
 		RelationOpenSmgr(rel);
-		open_datumstreamread_segfile(basepath, rel, segInfo, ds[attno], attno);
+		if (!open_datumstreamread_segfile(basepath, rel, segInfo, ds[attno], attno))
+		{
+			pfree(basepath);
+			return false;
+		}
 
-		/* skip reading block for ANALYZE */
-		if ((scan->rs_base.rs_flags & SO_TYPE_ANALYZE) != 0)
-			continue;
+	}
 
-		datumstreamread_block(ds[attno], blockDirectory, attno);
+	/*
+	 * All projected files have been downloaded successfully. Only now inspect
+	 * their first blocks, so a later failed column cannot leave partial block
+	 * directory entries for a segment that will be skipped.
+	 */
+	if ((scan->rs_base.rs_flags & SO_TYPE_ANALYZE) == 0)
+	{
+		for (AttrNumber i = 0; i < num_proj_atts; i++)
+		{
+			AttrNumber	attno = proj_atts[i];
 
-		AOCSScanDesc_UpdateTotalBytesRead(scan, attno);
+			datumstreamread_block(ds[attno], blockDirectory, attno);
+			AOCSScanDesc_UpdateTotalBytesRead(scan, attno);
+		}
 	}
 
 	pfree(basepath);
+	return true;
 }
 
 /*
@@ -437,7 +452,11 @@ open_next_scan_seg(AOCSScanDesc scan)
 															true);
 				}
 
-				open_all_datumstreamread_segfiles(scan, curSegInfo);
+				if (!open_all_datumstreamread_segfiles(scan, curSegInfo))
+				{
+					close_cur_scan_seg(scan);
+					continue;
+				}
 
 				return scan->cur_seg;
 			}
@@ -1929,10 +1948,10 @@ openFetchSegmentFile(AOCSFetchDesc aocsFetchDesc,
 		return false;
 
 	RelationOpenSmgr(aocsFetchDesc->relation);
-	open_datumstreamread_segfile(aocsFetchDesc->basepath, aocsFetchDesc->relation,
-								 fsInfo,
-								 datumStreamFetchDesc->datumStream,
-								 colNo);
+	if (!open_datumstreamread_segfile(aocsFetchDesc->basepath,
+									aocsFetchDesc->relation, fsInfo,
+									datumStreamFetchDesc->datumStream, colNo))
+		return false;
 
 	datumStreamFetchDesc->currentSegmentFile.num = openSegmentFileNum;
 	datumStreamFetchDesc->currentSegmentFile.logicalEof = logicalEof;
@@ -2498,8 +2517,10 @@ aocs_headerscan_opensegfile(AOCSHeaderScanDesc hdesc,
 							filenum, &fileSegNo, fn);
 	Assert(strlen(fn) + 1 <= MAXPGPATH);
 	vpe = getAOCSVPEntry(seginfo, hdesc->colno);
-	AppendOnlyStorageRead_OpenFile(&hdesc->ao_read, fn, seginfo->formatversion,
-								   vpe->eof);
+	if (!AppendOnlyStorageRead_OpenFile(&hdesc->ao_read, fn,
+									 seginfo->formatversion, vpe->eof))
+		ereport(ERROR,
+				(errmsg("could not open Append-Only segment file '%s'", fn)));
 }
 
 bool

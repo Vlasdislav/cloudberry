@@ -227,6 +227,9 @@ SetNextFileSegForRead(AppendOnlyScanDesc scan)
 		scan->initedStorageRoutines = true;
 	}
 
+
+NextSegment:
+	finished_all_files = true;
 	/*
 	 * Do we have more segment files to read or are we done?
 	 */
@@ -291,11 +294,13 @@ SetNextFileSegForRead(AppendOnlyScanDesc scan)
 	Assert(scan->initedStorageRoutines);
 
 
-	AppendOnlyStorageRead_OpenFile(
-								   &scan->storageRead,
-								   scan->aos_filenamepath,
-								   formatversion,
-								   eof);
+	if (!AppendOnlyStorageRead_OpenFile(&scan->storageRead,
+								 scan->aos_filenamepath, formatversion, eof))
+	{
+		if (scan->blockDirectory)
+			AppendOnlyBlockDirectory_End_forInsert(scan->blockDirectory);
+		goto NextSegment;
+	}
 
 	AppendOnlyExecutionReadBlock_SetSegmentFileNum(
 												   &scan->executorReadBlock,

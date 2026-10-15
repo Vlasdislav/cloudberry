@@ -167,6 +167,13 @@ typedef struct f_smgr_ao {
 	int				(*smgr_FileSync) (File file, uint32 wait_event_info);
 } f_smgr_ao;
 
+/*
+ * An AO storage manager may return this from smgr_AORelOpenSegFile when an
+ * opt-in policy has decided that the current segment must be skipped. It is
+ * distinct from -1, which remains an ordinary open failure.
+ */
+#define SMGR_AO_SEGMENT_SKIPPED (-2)
+
 
 typedef void (*smgr_init_hook_type) (void);
 typedef void (*smgr_hook_type) (SMgrRelation reln, BackendId backend, SMgrImpl which, Relation rel);

@@ -839,7 +839,7 @@ datumstreamwrite_open_file(DatumStreamWrite *ds, char *fn, int64 eof, int64 eofU
 	ds->need_close_file = true;
 }
 
-void
+bool
 datumstreamread_open_file(DatumStreamRead * ds, char *fn, int64 eof, int64 eofUncompressed, RelFileNode relFileNode, int32 segmentFileNum, int version)
 {
 	ds->eof = eof;
@@ -848,9 +848,11 @@ datumstreamread_open_file(DatumStreamRead * ds, char *fn, int64 eof, int64 eofUn
 	if (ds->need_close_file)
 		datumstreamread_close_file(ds);
 
-	AppendOnlyStorageRead_OpenFile(&ds->ao_read, fn, version, ds->eof);
+	if (!AppendOnlyStorageRead_OpenFile(&ds->ao_read, fn, version, ds->eof))
+		return false;
 
 	ds->need_close_file = true;
+	return true;
 }
 
 void
