@@ -58,6 +58,7 @@
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/client/DefaultRetryStrategy.h>
 #include <aws/core/http/Scheme.h>
+#include <aws/core/utils/memory/AWSMemory.h>
 #include <aws/core/utils/stream/PreallocatedStreamBuf.h>
 #include <aws/s3/S3Client.h>
 #include <aws/s3/S3ClientConfiguration.h>
@@ -73,11 +74,13 @@
 #include <aws/s3/model/UploadPartRequest.h>
 
 #include "common/storage_arrow.h"
+#include "common/aws_memory_manager.h"
 
 extern "C"
 {
 #include "postgres.h"
 #include "miscadmin.h"
+#include "utils/vmem_tracker.h"
 }
 
 namespace
@@ -89,6 +92,96 @@ const char *const DL_S3_ALLOC_TAG = "datalake_fdw";
 constexpr int64_t DL_S3_PART_SIZE = 8 * 1024 * 1024;
 
 Aws::SDKOptions sdk_options;
+
+/*
+ * Do not palloc, call the tracker, throw, or service interrupts in an SDK
+ * allocation callback. The SDK uses worker threads and is built without C++
+ * exception handling. In particular, a quota failure here is not a safe way
+ * to cancel a query. Reconcile on the PostgreSQL thread between SDK calls.
+ */
+DlAwsMemoryManager sdk_memory_manager;
+DlSdkMemoryAccount sdk_memory_account;
+bool sdk_memory_failure_pending = false;
+
+/* Called only on the PostgreSQL thread, including during error cleanup. */
+bool
+refresh_sdk_memory()
+{
+	/* Before activation there is no quota to reserve against. */
+	if (!VmemTrackerIsActivated())
+		return true;
+
+	return sdk_memory_account.Reconcile(
+		sdk_memory_manager.ledger.TakeSnapshot(),
+		[](std::size_t bytes) {
+			if (bytes > static_cast<std::size_t>(INT64_MAX))
+				return false;
+			HOLD_INTERRUPTS();
+			auto result = VmemTracker_ReserveVmem(static_cast<int64>(bytes));
+			RESUME_INTERRUPTS();
+			return result == MemoryAllocation_Success;
+		},
+		[](std::size_t bytes) {
+			VmemTracker_ReleaseVmem(static_cast<int64>(bytes));
+		});
+}
+
+arrow::Status
+check_sdk_memory()
+{
+	bool failed = sdk_memory_failure_pending;
+
+	sdk_memory_failure_pending = false;
+	if (!refresh_sdk_memory())
+		failed = true;
+	if (failed)
+		return arrow::Status::OutOfMemory(
+			"AWS SDK memory exceeded Cloudberry's memory allowance; "
+			"checked between SDK calls");
+	return arrow::Status::OK();
+}
+
+class SdkMemoryRefresh
+{
+public:
+	void FailureReported() { failure_reported_ = true; }
+
+	~SdkMemoryRefresh()
+	{
+		/*
+		 * A mutating request may already have succeeded. Do not turn success
+		 * into failure before its caller records an upload id or completion.
+		 * Report pressure before the next request; cleanup must still run.
+		 */
+		if (!refresh_sdk_memory() && !failure_reported_)
+			sdk_memory_failure_pending = true;
+	}
+
+private:
+	bool failure_reported_ = false;
+};
+
+template <typename Operation>
+auto
+sdk_call(Operation operation, bool mutating = false)
+	-> arrow::Result<decltype(operation())>
+{
+	ARROW_RETURN_NOT_OK(check_sdk_memory());
+	SdkMemoryRefresh refresh;
+	auto result = operation();
+
+	/* Reads can fail here without losing a remote side effect. */
+	if (!mutating)
+	{
+		auto status = check_sdk_memory();
+		if (!status.ok())
+		{
+			refresh.FailureReported();
+			return status;
+		}
+	}
+	return std::move(result);
+}
 
 /* ----------------------------------------------------------------------
  * Errors
@@ -259,7 +352,8 @@ public:
 											   (uint64_t) nbytes);
 		});
 
-		auto		outcome = client_->GetObject(request);
+		ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->GetObject(request); }));
 
 		if (!outcome.IsSuccess())
 			return status_from_aws("read", bucket_, key_, outcome.GetError());
@@ -449,7 +543,8 @@ private:
 		request.SetBucket(bucket_.c_str());
 		request.SetKey(key_.c_str());
 
-		auto		outcome = client_->CreateMultipartUpload(request);
+		ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->CreateMultipartUpload(request); }, true));
 
 		if (!outcome.IsSuccess())
 			return status_from_aws("start upload to", bucket_, key_,
@@ -477,7 +572,8 @@ private:
 		request.SetBody(Aws::MakeShared<Aws::IOStream>(DL_S3_ALLOC_TAG,
 													   &stream_buf));
 
-		auto		outcome = client_->UploadPart(request);
+		ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->UploadPart(request); }, true));
 
 		if (!outcome.IsSuccess())
 			return status_from_aws("upload part to", bucket_, key_,
@@ -499,7 +595,8 @@ private:
 		request.SetBody(Aws::MakeShared<Aws::IOStream>(DL_S3_ALLOC_TAG,
 													   &stream_buf));
 
-		auto		outcome = client_->PutObject(request);
+		ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->PutObject(request); }, true));
 
 		if (!outcome.IsSuccess())
 			return status_from_aws("write", bucket_, key_, outcome.GetError());
@@ -525,7 +622,8 @@ private:
 		request.SetUploadId(upload_id_.c_str());
 		request.SetMultipartUpload(completed);
 
-		auto		outcome = client_->CompleteMultipartUpload(request);
+		ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->CompleteMultipartUpload(request); }, true));
 
 		if (!outcome.IsSuccess())
 		{
@@ -548,6 +646,7 @@ private:
 		request.SetKey(key_.c_str());
 		request.SetUploadId(upload_id_.c_str());
 
+		SdkMemoryRefresh refresh;
 		auto		outcome = client_->AbortMultipartUpload(request);
 
 		upload_id_.clear();
@@ -606,7 +705,8 @@ public:
 			probe.SetBucket(bucket.c_str());
 			probe.SetMaxKeys(1);
 
-			auto		outcome = client_->ListObjectsV2(probe);
+			ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->ListObjectsV2(probe); }));
 			arrow::fs::FileInfo info(path);
 
 			if (!outcome.IsSuccess())
@@ -626,7 +726,8 @@ public:
 		request.SetBucket(bucket.c_str());
 		request.SetKey(key.c_str());
 
-		auto		outcome = client_->HeadObject(request);
+		ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->HeadObject(request); }));
 
 		if (outcome.IsSuccess())
 		{
@@ -689,7 +790,8 @@ public:
 			if (!token.empty())
 				request.SetContinuationToken(token);
 
-			auto		outcome = client_->ListObjectsV2(request);
+			ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->ListObjectsV2(request); }));
 
 			if (!outcome.IsSuccess())
 				return status_from_aws("list", bucket, key, outcome.GetError());
@@ -773,7 +875,8 @@ public:
 		request.SetBucket(bucket.c_str());
 		request.SetKey(key.c_str());
 
-		auto		outcome = client_->HeadObject(request);
+		ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->HeadObject(request); }));
 
 		if (!outcome.IsSuccess())
 			return status_from_aws("open", bucket, key, outcome.GetError());
@@ -818,7 +921,8 @@ public:
 		head.SetBucket(bucket.c_str());
 		head.SetKey(key.c_str());
 
-		auto		found = client_->HeadObject(head);
+		ARROW_ASSIGN_OR_RAISE(auto found,
+							  sdk_call([&]() { return client_->HeadObject(head); }));
 
 		if (!found.IsSuccess())
 			return status_from_aws("delete", bucket, key, found.GetError());
@@ -828,7 +932,8 @@ public:
 		request.SetBucket(bucket.c_str());
 		request.SetKey(key.c_str());
 
-		auto		outcome = client_->DeleteObject(request);
+		ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->DeleteObject(request); }, true));
 
 		if (!outcome.IsSuccess())
 			return status_from_aws("delete", bucket, key, outcome.GetError());
@@ -905,7 +1010,8 @@ private:
 		request.SetPrefix((key + "/").c_str());
 		request.SetMaxKeys(1);
 
-		auto		outcome = client_->ListObjectsV2(request);
+		ARROW_ASSIGN_OR_RAISE(auto outcome,
+							  sdk_call([&]() { return client_->ListObjectsV2(request); }));
 
 		if (!outcome.IsSuccess())
 			return status_from_aws("inspect", bucket, key, outcome.GetError());
@@ -950,7 +1056,26 @@ initialize_s3(void)
 	 * shutdown there.
 	 */
 	Assert(MyProcPid != PostmasterPid);
+	if (Aws::Utils::Memory::GetMemorySystem() != nullptr)
+		return arrow::Status::Invalid(
+			"AWS SDK was initialized before datalake_fdw's memory manager");
+	sdk_options.memoryManagementOptions.memoryManager = &sdk_memory_manager;
 	Aws::InitAPI(sdk_options);
+	/* Also catch a library/header mismatch instead of silently losing tracking. */
+	if (Aws::Utils::Memory::GetMemorySystem() != &sdk_memory_manager)
+	{
+		Aws::ShutdownAPI(sdk_options);
+		return arrow::Status::Invalid(
+			"AWS SDK did not install datalake_fdw's memory manager; "
+			"rebuild it with CUSTOM_MEMORY_MANAGEMENT=ON");
+	}
+	auto status = check_sdk_memory();
+	if (!status.ok())
+	{
+		Aws::ShutdownAPI(sdk_options);
+		(void) refresh_sdk_memory();
+		return status;
+	}
 	return arrow::Status::OK();
 }
 
@@ -958,12 +1083,17 @@ void
 finalize_s3(void)
 {
 	Aws::ShutdownAPI(sdk_options);
+	/* The tracker may already be shut down by the process-exit callbacks. */
+	(void) refresh_sdk_memory();
 }
 
 arrow::Result<DatalakeMountedFs>
 mount_s3(const DatalakeLocation *location, const DlKeyValue *kv, int nkv,
 		 const DatalakeStorageHost *host)
 {
+	ARROW_RETURN_NOT_OK(check_sdk_memory());
+	SdkMemoryRefresh refresh;
+
 	if (location == NULL || location->authority == NULL ||
 		location->authority[0] == '\0')
 		return arrow::Status::Invalid("s3 location has no bucket");
@@ -996,7 +1126,8 @@ mount_s3(const DatalakeLocation *location, const DlKeyValue *kv, int nkv,
 	 */
 	config.connectTimeoutMs = 5000;
 	config.requestTimeoutMs = 300000;
-	config.retryStrategy = std::make_shared<Aws::Client::DefaultRetryStrategy>(3);
+	config.retryStrategy = Aws::MakeShared<Aws::Client::DefaultRetryStrategy>(
+		DL_S3_ALLOC_TAG, 3);
 
 	/*
 	 * Virtual-host addressing asks DNS for bucket.host, which is right for
@@ -1052,7 +1183,8 @@ mount_s3(const DatalakeLocation *location, const DlKeyValue *kv, int nkv,
 				DL_S3_ALLOC_TAG, access_key, secret_key,
 				session_token != NULL ? session_token : "");
 
-		client = std::make_shared<Aws::S3::S3Client>(provider, nullptr, config);
+		client = Aws::MakeShared<Aws::S3::S3Client>(
+			DL_S3_ALLOC_TAG, provider, nullptr, config);
 	}
 	else
 	{
@@ -1061,9 +1193,16 @@ mount_s3(const DatalakeLocation *location, const DlKeyValue *kv, int nkv,
 			Aws::MakeShared<Aws::Auth::DefaultAWSCredentialsProviderChain>(
 				DL_S3_ALLOC_TAG);
 
-		client = std::make_shared<Aws::S3::S3Client>(provider, nullptr, config);
+		client = Aws::MakeShared<Aws::S3::S3Client>(
+			DL_S3_ALLOC_TAG, provider, nullptr, config);
 	}
 
+	auto status = check_sdk_memory();
+	if (!status.ok())
+	{
+		refresh.FailureReported();
+		return status;
+	}
 	DatalakeMountedFs mounted;
 
 	mounted.fs = std::make_shared<S3FileSystem>(

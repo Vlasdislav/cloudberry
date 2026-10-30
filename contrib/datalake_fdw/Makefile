@@ -261,6 +261,16 @@ dltest-clean:
 
 .PHONY: dltest-all dltest-install dltest-clean
 
+# No server required; the second run uses the actual SDK allocator interface
+# and containers. Reuse the same static-library closure as the extension.
+.PHONY: check-sdk-memory
+check-sdk-memory:
+	$(MAKE) -C $(srcdir)/test/unit check CXX="$(CXX)"
+ifneq ($(AWS_SDK_PREFIX),)
+	$(MAKE) -C $(srcdir)/test/unit check-aws CXX="$(CXX)" \
+		AWS_SDK_PREFIX="$(AWS_SDK_PREFIX)" AWS_SDK_TEST_LIBS="$(AWS_SDK_LIBS)"
+endif
+
 # Hung off check and installcheck so that both get both categories.  REGRESS_OPTS
 # has to come along: pgxs.mk is where --dbname=$(CONTRIB_TESTDB) is added to it,
 # and without that pg_regress falls back to "regression" -- which it DROPs and

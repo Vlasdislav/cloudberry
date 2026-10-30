@@ -90,7 +90,7 @@ cmake -S aws-sdk-cpp -B aws-sdk-cpp/build -GNinja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/datalake \
     -DBUILD_ONLY="s3;sts" -DBUILD_SHARED_LIBS=OFF \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DENABLE_TESTING=OFF -DUSE_OPENSSL=ON
+    -DENABLE_TESTING=OFF -DUSE_OPENSSL=ON -DCUSTOM_MEMORY_MANAGEMENT=ON
 ninja -C aws-sdk-cpp/build install
 ```
 
@@ -111,6 +111,67 @@ a prefix that has no SDK in it is an error rather than a silent fallback.
 
 Arrow itself needs no S3 support: this extension does not use Arrow's S3
 filesystem, which is just as well, because no RPM of Arrow is built with it.
+
+The SDK must be built with `CUSTOM_MEMORY_MANAGEMENT=ON`. Rebuild an existing
+SDK installation that used the default `OFF`: this changes the allocator types
+of `Aws::String` and other SDK containers, so the SDK and every consumer must
+agree. Defining `USE_AWS_MEMORY_MANAGEMENT` only when building the extension is
+not sufficient. The extension refuses SDK headers without this setting, and
+also checks that its manager was installed at runtime.
+
+## AWS SDK memory accounting
+
+The S3 backend installs an AWS `MemorySystemInterface`. Allocation callbacks
+record live bytes and the peak since the preceding checkpoint, including the
+manager's per-allocation header and alignment padding. Callbacks do not call
+PostgreSQL, so allocation and freeing on SDK worker threads are supported.
+The manager lives until process exit; it is not allocated in a query's memory
+context.
+
+On the PostgreSQL thread, SDK initialization, mounting, and request boundaries
+reconcile those counters with `VmemTracker_ReserveVmem` and
+`VmemTracker_ReleaseVmem`, the same tracker the Arrow pool uses. A checkpoint
+first tries to reserve the observed peak, then releases the difference from
+the currently live allocation size. Failed reservations are never released as
+though they had succeeded. Pending PostgreSQL interrupts are held while
+reserving, as in the Arrow pool.
+
+This is **deferred accounting, not an allocation-time hard limit**. The SDK
+is compiled without C++ exception handling, and its allocation consumers do
+not consistently handle `NULL`. A memory quota must not make a callback
+`longjmp`, throw through SDK frames, or return `NULL` to cancel a query.
+Consequently, SDK allocations use the system allocator. Reads check pressure
+after returning from the SDK. Mutating calls defer reporting it until before
+the next SDK request: the completed request keeps its result, so a created
+upload ID or a completed write is not lost to an accounting error. A final
+mutating request can complete before pressure is reported; an idle session
+need not observe the pending error until its next S3 operation.
+Abort requests bypass the pressure check so multipart cleanup remains possible.
+Temporary memory can exceed the quota within a single call. System allocation
+failure retains the SDK's existing OOM limitations.
+
+This uses the existing process/session vmem policy, including its behavior
+when resource groups are active. It does not introduce an independent hard
+resource-group limit or transfer persistent SDK allocations between groups.
+SDK 1.11.844 also routes its CRT allocator and its libcurl allocation callbacks
+through the manager when it controls their initialization. This does not
+guarantee coverage of independently initialized dependencies, OpenSSL internals,
+or ordinary `std::` containers in the extension. Arrow buffers, including the
+multipart data buffer, continue to use the tracked Arrow pool and are not
+counted twice.
+
+Run the standalone accounting tests without a cluster:
+
+```sh
+make -C test/unit check
+```
+
+With a configured extension build and a custom-memory SDK, also verify that
+real AWS containers use the manager:
+
+```sh
+make USE_PGXS=1 AWS_SDK_PREFIX=/opt/datalake check-sdk-memory
+```
 
 ## Writing a storage backend
 
@@ -220,10 +281,7 @@ package as the extension.
   arise there.
 * An upload abandoned by a crashed backend leaves its parts behind.  A bucket
   lifecycle rule that expires incomplete multipart uploads is the usual answer.
-* Reading and writing through `s3://` costs a backend process about 15 MiB of
-  resident memory that `gp_vmem_protect_limit` does not see: the SDK client,
-  its connection and one part buffer are allocated by the SDK itself rather
-  than through the tracked pool.  Measured against the same file written
-  locally, that overhead stays flat as the object grows -- 7.9 MiB for a 2 MB
-  file, 14.8 MiB for a 149 MB one -- so it is a per-process constant, not a
-  cost per byte.
+* SDK memory accounting is deferred to call boundaries. It neither prevents
+  transient quota overshoot nor accounts for every allocation in the SDK's
+  dependencies; see AWS SDK memory accounting above. No claim is made that
+  all S3-related resident memory is covered by `gp_vmem_protect_limit`.

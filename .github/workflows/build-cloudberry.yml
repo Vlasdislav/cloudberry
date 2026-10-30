@@ -1454,7 +1454,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/datalake
-          key: aws-sdk-cpp-1.11.844-rocky${{ matrix.rocky_version }}-${{ runner.arch }}
+          key: aws-sdk-cpp-1.11.844-memory-v1-rocky${{ matrix.rocky_version }}-${{ runner.arch }}
 
       - name: Build the AWS SDK for C++
         if: success() && needs.check-skip.outputs.should_skip != 'true' && matrix.pgxs_extension == 'contrib/datalake_fdw' && steps.aws-sdk-cache.outputs.cache-hit != 'true'
@@ -1493,7 +1493,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/datalake \
             -DBUILD_ONLY="s3;sts" -DBUILD_SHARED_LIBS=OFF \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-            -DENABLE_TESTING=OFF -DUSE_OPENSSL=ON
+            -DENABLE_TESTING=OFF -DUSE_OPENSSL=ON -DCUSTOM_MEMORY_MANAGEMENT=ON
           ninja -C /tmp/aws-sdk-cpp/build install
 
           # The cache stores what is under /opt/datalake; the tree it was built
@@ -1552,6 +1552,16 @@ jobs:
               ls -l \"\$(pg_config --pkglibdir)\" | grep '$(basename "${PGXS_EXTENSION}")' && \
               ls -l \"\$(pg_config --sharedir)/extension\" | grep '$(basename "${PGXS_EXTENSION}")'"
           } 2>&1 | tee -a build-logs/details/build-pgxs-extension.log
+
+      - name: Check datalake AWS memory accounting
+        if: success() && needs.check-skip.outputs.should_skip != 'true' && matrix.pgxs_extension == 'contrib/datalake_fdw'
+        env:
+          SRC_DIR: ${{ github.workspace }}
+        run: |
+          set -eo pipefail
+          su - gpadmin -c "source /usr/local/cloudberry-db/cloudberry-env.sh && \
+            cd ${SRC_DIR}/contrib/datalake_fdw && \
+            make USE_PGXS=1 AWS_SDK_PREFIX=/opt/datalake check-sdk-memory"
 
       - name: Create Apache Cloudberry demo cluster
         if: success() && needs.check-skip.outputs.should_skip != 'true'
