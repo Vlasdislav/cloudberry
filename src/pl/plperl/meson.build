@@ -63,12 +63,6 @@ install_data(
   install_dir: dir_data_extension,
 )
 
-install_data(
-  'plperlu.control',
-  'plperlu--1.0.sql',
-  install_dir: dir_data_extension,
-)
-
 install_headers(
   'plperl.h',
   'plperl_system.h',
@@ -90,7 +84,6 @@ tests += {
       'plperl_elog',
       'plperl_util',
       'plperl_init',
-      'plperlu',
       'plperl_array',
       'plperl_call',
       'plperl_transaction',

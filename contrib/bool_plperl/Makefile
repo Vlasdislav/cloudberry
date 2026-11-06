@@ -8,10 +8,10 @@ PGFILEDESC = "bool_plperl - bool transform for plperl"
 
 PG_CPPFLAGS = -I$(top_srcdir)/src/pl/plperl
 
-EXTENSION = bool_plperlu bool_plperl
-DATA = bool_plperlu--1.0.sql bool_plperl--1.0.sql
+EXTENSION = bool_plperl
+DATA = bool_plperl--1.0.sql
 
-REGRESS = bool_plperl bool_plperlu
+REGRESS = bool_plperl
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config

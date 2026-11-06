@@ -1,9 +1,13 @@
 --
--- Install the plperl and plperlu extensions
+-- Install the plperl extension
 --
 
+-- These legacy extensions must not be shipped.
+SELECT name FROM pg_available_extensions
+WHERE name IN ('plperlu', 'plpythonu') ORDER BY name;
+
 -- Before going ahead with the to-be-tested installations, verify that
--- a non-superuser is allowed to install plperl (but not plperlu) when
+-- a non-superuser is allowed to install plperl when
 -- suitable permissions have been granted.
 
 CREATE USER regress_plperl_user1;
@@ -12,7 +16,6 @@ CREATE USER regress_plperl_user2;
 SET ROLE regress_plperl_user1;
 
 CREATE EXTENSION plperl;  -- fail
-CREATE EXTENSION plperlu;  -- fail
 
 RESET ROLE;
 
@@ -26,7 +29,6 @@ $$;
 SET ROLE regress_plperl_user1;
 
 CREATE EXTENSION plperl;
-CREATE EXTENSION plperlu;  -- fail
 CREATE SCHEMA plperl_setup_scratch;
 SET search_path = plperl_setup_scratch;
 GRANT ALL ON SCHEMA plperl_setup_scratch TO regress_plperl_user2;
@@ -70,4 +72,3 @@ DROP USER regress_plperl_user2;
 
 -- Now install the versions that will be used by subsequent test scripts.
 CREATE EXTENSION plperl;
-CREATE EXTENSION plperlu;

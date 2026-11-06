@@ -31,12 +31,6 @@ install_data(
   kwargs: contrib_data_args,
 )
 
-install_data(
-  'jsonb_plperlu.control',
-  'jsonb_plperlu--1.0.sql',
-  kwargs: contrib_data_args,
-)
-
 
 tests += {
   'name': 'jsonb_plperl',
@@ -45,7 +39,6 @@ tests += {
   'regress': {
     'sql': [
       'jsonb_plperl',
-      'jsonb_plperlu',
     ],
   },
 }

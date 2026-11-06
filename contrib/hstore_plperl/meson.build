@@ -31,12 +31,6 @@ install_data(
   kwargs: contrib_data_args,
 )
 
-install_data(
-  'hstore_plperlu.control',
-  'hstore_plperlu--1.0.sql',
-  kwargs: contrib_data_args,
-)
-
 tests += {
   'name': 'hstore_plperl',
   'sd': meson.current_source_dir(),
@@ -44,7 +38,6 @@ tests += {
   'regress': {
     'sql': [
       'hstore_plperl',
-      'hstore_plperlu',
       'create_transform',
     ],
   },
