@@ -818,7 +818,7 @@ GCOV
 enable_debug
 enable_orafce
 enable_faultinjector
-enable__pl_untrusted_extensions
+enable_pl_untrusted_extensions
 enable_debug_extensions
 enable_gpfdist
 enable_strong_random
@@ -3625,7 +3625,6 @@ else
 fi
 
 
-enable__pl_untrusted_extensions=$enable_pl_untrusted_extensions
 
 
 

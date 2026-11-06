@@ -26,7 +26,7 @@ include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
 endif
 
-ifeq ($(enable__pl_untrusted_extensions),yes)
+ifeq ($(enable_pl_untrusted_extensions),yes)
 EXTENSION += hstore_plperlu
 DATA += hstore_plperlu--1.0.sql
 endif

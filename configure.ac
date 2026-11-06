@@ -237,8 +237,7 @@ AC_SUBST(enable_debug_extensions)
 # The legacy untrusted PL/Perl extension is available for test builds.
 PGAC_ARG_BOOL(enable, pl-untrusted-extensions, no,
               [install the legacy plperlu and plpythonu extensions])
-enable__pl_untrusted_extensions=$enable_pl_untrusted_extensions
-AC_SUBST(enable__pl_untrusted_extensions)
+AC_SUBST(enable_pl_untrusted_extensions)
 
 #
 # Enable fault injector
