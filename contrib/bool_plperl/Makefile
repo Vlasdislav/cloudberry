@@ -11,7 +11,7 @@ PG_CPPFLAGS = -I$(top_srcdir)/src/pl/plperl
 EXTENSION = bool_plperl
 DATA = bool_plperl--1.0.sql
 
-REGRESS = bool_plperl
+REGRESS = bool_plperl bool_plperlu
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config
@@ -22,6 +22,11 @@ subdir = contrib/bool_plperl
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
+endif
+
+ifeq ($(enable_legacy_pl_extensions),yes)
+EXTENSION += bool_plperlu
+DATA += bool_plperlu--1.0.sql
 endif
 
 # We must link libperl explicitly

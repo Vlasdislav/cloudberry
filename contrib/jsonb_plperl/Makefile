@@ -11,7 +11,7 @@ PG_CPPFLAGS = -I$(top_srcdir)/src/pl/plperl
 EXTENSION = jsonb_plperl
 DATA = jsonb_plperl--1.0.sql
 
-REGRESS = jsonb_plperl
+REGRESS = jsonb_plperl jsonb_plperlu
 
 SHLIB_LINK += $(filter -lm, $(LIBS))
 
@@ -24,6 +24,11 @@ subdir = contrib/jsonb_plperl
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
+endif
+
+ifeq ($(enable_legacy_pl_extensions),yes)
+EXTENSION += jsonb_plperlu
+DATA += jsonb_plperlu--1.0.sql
 endif
 
 # We must link libperl explicitly

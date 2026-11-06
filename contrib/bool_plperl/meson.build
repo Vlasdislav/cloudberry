@@ -31,6 +31,12 @@ install_data(
   kwargs: contrib_data_args,
 )
 
+install_data(
+  'bool_plperlu.control',
+  'bool_plperlu--1.0.sql',
+  kwargs: contrib_data_args,
+)
+
 tests += {
   'name': 'bool_plperl',
   'sd': meson.current_source_dir(),
@@ -38,6 +44,7 @@ tests += {
   'regress': {
     'sql': [
       'bool_plperl',
+      'bool_plperlu',
     ],
   },
 }

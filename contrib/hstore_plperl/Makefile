@@ -10,7 +10,7 @@ PGFILEDESC = "hstore_plperl - hstore transform for plperl"
 EXTENSION = hstore_plperl
 DATA = hstore_plperl--1.0.sql
 
-REGRESS = hstore_plperl create_transform
+REGRESS = hstore_plperl hstore_plperlu create_transform
 EXTRA_INSTALL = contrib/hstore
 
 ifdef USE_PGXS
@@ -24,6 +24,11 @@ subdir = contrib/hstore_plperl
 top_builddir = ../..
 include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
+endif
+
+ifeq ($(enable_legacy_pl_extensions),yes)
+EXTENSION += hstore_plperlu
+DATA += hstore_plperlu--1.0.sql
 endif
 
 # We must link libperl explicitly
