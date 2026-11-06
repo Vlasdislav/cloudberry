@@ -1618,7 +1618,7 @@ Optional Features:
   --disable-debug-extensions
                           exclude debug extensions in gpcontrib
   --enable-pl-untrusted-extensions
-                          install the legacy plperlu and plpythonu extensions
+                          install the untrusted plperlu and plpythonu extensions
   --disable-faultinjector disable fault injector
   --enable-orafce         build with Oracle compatibility functions
   --enable-debug          build with debugging symbols (-g)
@@ -3601,7 +3601,7 @@ fi
 
 
 
-# The legacy untrusted PL/Perl extension is available for test builds.
+# The untrusted PL/Perl extension is available for test builds.
 
 
 # Check whether --enable-pl-untrusted-extensions was given.
