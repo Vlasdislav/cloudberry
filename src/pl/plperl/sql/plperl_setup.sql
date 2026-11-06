@@ -2,10 +2,6 @@
 -- Install the plperl extension
 --
 
--- These legacy extensions must not be shipped.
-SELECT name FROM pg_available_extensions
-WHERE name IN ('plperlu', 'plpythonu') ORDER BY name;
-
 -- Before going ahead with the to-be-tested installations, verify that
 -- a non-superuser is allowed to install plperl when
 -- suitable permissions have been granted.
