@@ -818,7 +818,7 @@ GCOV
 enable_debug
 enable_orafce
 enable_faultinjector
-enable_legacy_pl_extensions
+enable__pl_untrusted_extensions
 enable_debug_extensions
 enable_gpfdist
 enable_strong_random
@@ -890,7 +890,7 @@ enable_atomics
 enable_strong_random
 enable_gpfdist
 enable_debug_extensions
-enable_legacy_pl_extensions
+enable_pl_untrusted_extensions
 enable_faultinjector
 enable_orafce
 enable_debug
@@ -1617,7 +1617,7 @@ Optional Features:
   --disable-gpfdist       do not use gpfdist
   --disable-debug-extensions
                           exclude debug extensions in gpcontrib
-  --enable-legacy-pl-extensions
+  --enable-pl-untrusted-extensions
                           install the legacy plperlu and plpythonu extensions
   --disable-faultinjector disable fault injector
   --enable-orafce         build with Oracle compatibility functions
@@ -3604,9 +3604,9 @@ fi
 # The legacy untrusted PL/Perl extension is available for test builds.
 
 
-# Check whether --enable-legacy-pl-extensions was given.
-if test "${enable_legacy_pl_extensions+set}" = set; then :
-  enableval=$enable_legacy_pl_extensions;
+# Check whether --enable-pl-untrusted-extensions was given.
+if test "${enable_pl_untrusted_extensions+set}" = set; then :
+  enableval=$enable_pl_untrusted_extensions;
   case $enableval in
     yes)
       :
@@ -3615,14 +3615,17 @@ if test "${enable_legacy_pl_extensions+set}" = set; then :
       :
       ;;
     *)
-      as_fn_error $? "no argument expected for --enable-legacy-pl-extensions option" "$LINENO" 5
+      as_fn_error $? "no argument expected for --enable-pl-untrusted-extensions option" "$LINENO" 5
       ;;
   esac
 
 else
-  enable_legacy_pl_extensions=no
+  enable_pl_untrusted_extensions=no
 
 fi
+
+
+enable__pl_untrusted_extensions=$enable_pl_untrusted_extensions
 
 
 

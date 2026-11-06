@@ -485,7 +485,7 @@ jobs:
           export BUILD_DESTINATION=${SRC_DIR}/debian/build
 
           chmod +x "${SRC_DIR}"/devops/build/automation/cloudberry/scripts/configure-cloudberry.sh
-          if ! time su - gpadmin -c "cd ${SRC_DIR} && SRC_DIR=${SRC_DIR} ENABLE_DEBUG=${{ env.ENABLE_DEBUG }} ENABLE_LEGACY_PL_EXTENSIONS=true BUILD_DESTINATION=${BUILD_DESTINATION} ${SRC_DIR}/devops/build/automation/cloudberry/scripts/configure-cloudberry.sh"; then
+          if ! time su - gpadmin -c "cd ${SRC_DIR} && SRC_DIR=${SRC_DIR} ENABLE_DEBUG=${{ env.ENABLE_DEBUG }} ENABLE_PL_UNTRUSTED_EXTENSIONS=true BUILD_DESTINATION=${BUILD_DESTINATION} ${SRC_DIR}/devops/build/automation/cloudberry/scripts/configure-cloudberry.sh"; then
             echo "::error::Configure script failed"
             exit 1
           fi

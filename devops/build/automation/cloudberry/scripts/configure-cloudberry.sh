@@ -149,9 +149,9 @@ fi
 
 # The installed product excludes these legacy extensions. Test builds can
 # opt in to exercise the corresponding regression suites.
-CONFIGURE_LEGACY_PL_OPTS=""
-if [ "${ENABLE_LEGACY_PL_EXTENSIONS:-false}" = "true" ]; then
-    CONFIGURE_LEGACY_PL_OPTS="--enable-legacy-pl-extensions"
+CONFIGURE_PL_UNTRUSTED_OPTS=""
+if [ "${ENABLE_PL_UNTRUSTED_EXTENSIONS:-false}" = "true" ]; then
+    CONFIGURE_PL_UNTRUSTED_OPTS="--enable-pl-untrusted-extensions"
 fi
 
 # Configure build
@@ -164,7 +164,7 @@ execute_cmd ./configure --prefix=${BUILD_DESTINATION} \
             --enable-orca \
             --enable-pax \
             --enable-tap-tests \
-            ${CONFIGURE_LEGACY_PL_OPTS} \
+            ${CONFIGURE_PL_UNTRUSTED_OPTS} \
             ${CONFIGURE_DEBUG_OPTS} \
             --with-diskquota \
             --with-gp-stats-collector \

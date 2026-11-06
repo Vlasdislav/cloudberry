@@ -31,7 +31,7 @@ install_data(
   kwargs: contrib_data_args,
 )
 
-if get_option('legacy_pl_extensions')
+if get_option('pl_untrusted_extensions')
   install_data(
     'jsonb_plperlu.control',
     'jsonb_plperlu--1.0.sql',

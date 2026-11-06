@@ -21,7 +21,7 @@ option('segsize_blocks', type: 'integer', value: 0,
 
 # Miscellaneous options
 
-option('legacy_pl_extensions', type: 'boolean', value: false,
+option('pl_untrusted_extensions', type: 'boolean', value: false,
   description: 'Install legacy plperlu and plpythonu extensions for tests')
 
 option('krb_srvnam', type: 'string', value: 'postgres',
