@@ -31,11 +31,13 @@ install_data(
   kwargs: contrib_data_args,
 )
 
-install_data(
-  'jsonb_plperlu.control',
-  'jsonb_plperlu--1.0.sql',
-  kwargs: contrib_data_args,
-)
+if get_option('legacy_pl_extensions')
+  install_data(
+    'jsonb_plperlu.control',
+    'jsonb_plperlu--1.0.sql',
+    kwargs: contrib_data_args,
+  )
+endif
 
 
 tests += {

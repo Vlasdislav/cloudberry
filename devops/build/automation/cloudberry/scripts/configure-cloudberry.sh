@@ -149,7 +149,7 @@ fi
 
 # The installed product excludes these legacy extensions. Test builds can
 # opt in to exercise the corresponding regression suites.
-CONFIGURE_LEGACY_PL_OPTS="--disable-legacy-pl-extensions"
+CONFIGURE_LEGACY_PL_OPTS=""
 if [ "${ENABLE_LEGACY_PL_EXTENSIONS:-false}" = "true" ]; then
     CONFIGURE_LEGACY_PL_OPTS="--enable-legacy-pl-extensions"
 fi

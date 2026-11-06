@@ -234,9 +234,9 @@ PGAC_ARG_BOOL(enable, debug-extensions, yes,
               [exclude debug extensions in gpcontrib])
 AC_SUBST(enable_debug_extensions)
 
-# Install the legacy untrusted PL/Perl extension by default for compatibility.
-PGAC_ARG_BOOL(enable, legacy-pl-extensions, yes,
-              [do not install the legacy plperlu and plpythonu extensions])
+# The legacy untrusted PL/Perl extension is available for test builds.
+PGAC_ARG_BOOL(enable, legacy-pl-extensions, no,
+              [install the legacy plperlu and plpythonu extensions])
 AC_SUBST(enable_legacy_pl_extensions)
 
 #

@@ -1617,9 +1617,8 @@ Optional Features:
   --disable-gpfdist       do not use gpfdist
   --disable-debug-extensions
                           exclude debug extensions in gpcontrib
-  --disable-legacy-pl-extensions
-                          do not install the legacy plperlu and plpythonu
-                          extensions
+  --enable-legacy-pl-extensions
+                          install the legacy plperlu and plpythonu extensions
   --disable-faultinjector disable fault injector
   --enable-orafce         build with Oracle compatibility functions
   --enable-debug          build with debugging symbols (-g)
@@ -3602,7 +3601,7 @@ fi
 
 
 
-# Install the legacy untrusted PL/Perl extension by default for compatibility.
+# The legacy untrusted PL/Perl extension is available for test builds.
 
 
 # Check whether --enable-legacy-pl-extensions was given.
@@ -3621,7 +3620,7 @@ if test "${enable_legacy_pl_extensions+set}" = set; then :
   esac
 
 else
-  enable_legacy_pl_extensions=yes
+  enable_legacy_pl_extensions=no
 
 fi
 

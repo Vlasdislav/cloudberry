@@ -21,6 +21,9 @@ option('segsize_blocks', type: 'integer', value: 0,
 
 # Miscellaneous options
 
+option('legacy_pl_extensions', type: 'boolean', value: false,
+  description: 'Install legacy plperlu and plpythonu extensions for tests')
+
 option('krb_srvnam', type: 'string', value: 'postgres',
   description: 'Default Kerberos service principal for GSSAPI')
 
