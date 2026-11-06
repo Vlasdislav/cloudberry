@@ -147,6 +147,13 @@ if [ "${ENABLE_MDBLOCALES:-false}" = "true" ]; then
     CONFIGURE_MDBLOCALES_OPTS="--with-mdblocales"
 fi
 
+# The installed product excludes these legacy extensions. Test builds can
+# opt in to exercise the corresponding regression suites.
+CONFIGURE_PL_UNTRUSTED_OPTS=""
+if [ "${ENABLE_PL_UNTRUSTED_EXTENSIONS:-false}" = "true" ]; then
+    CONFIGURE_PL_UNTRUSTED_OPTS="--enable-pl-untrusted-extensions"
+fi
+
 # Configure build
 log_section "Configure"
 execute_cmd ./configure --prefix=${BUILD_DESTINATION} \
@@ -157,6 +164,7 @@ execute_cmd ./configure --prefix=${BUILD_DESTINATION} \
             --enable-orca \
             --enable-pax \
             --enable-tap-tests \
+            ${CONFIGURE_PL_UNTRUSTED_OPTS} \
             ${CONFIGURE_DEBUG_OPTS} \
             --with-diskquota \
             --with-gp-stats-collector \

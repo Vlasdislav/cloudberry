@@ -63,11 +63,13 @@ install_data(
   install_dir: dir_data_extension,
 )
 
-install_data(
-  'plperlu.control',
-  'plperlu--1.0.sql',
-  install_dir: dir_data_extension,
-)
+if get_option('pl_untrusted_extensions')
+  install_data(
+    'plperlu.control',
+    'plperlu--1.0.sql',
+    install_dir: dir_data_extension,
+  )
+endif
 
 install_headers(
   'plperl.h',

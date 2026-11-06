@@ -234,6 +234,11 @@ PGAC_ARG_BOOL(enable, debug-extensions, yes,
               [exclude debug extensions in gpcontrib])
 AC_SUBST(enable_debug_extensions)
 
+# The untrusted PL/Perl extension is available for test builds.
+PGAC_ARG_BOOL(enable, pl-untrusted-extensions, no,
+              [install the untrusted plperlu and plpythonu extensions])
+AC_SUBST(enable_pl_untrusted_extensions)
+
 #
 # Enable fault injector
 #

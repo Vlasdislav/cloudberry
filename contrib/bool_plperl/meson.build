@@ -31,11 +31,13 @@ install_data(
   kwargs: contrib_data_args,
 )
 
-install_data(
-  'bool_plperlu.control',
-  'bool_plperlu--1.0.sql',
-  kwargs: contrib_data_args,
-)
+if get_option('pl_untrusted_extensions')
+  install_data(
+    'bool_plperlu.control',
+    'bool_plperlu--1.0.sql',
+    kwargs: contrib_data_args,
+  )
+endif
 
 tests += {
   'name': 'bool_plperl',
