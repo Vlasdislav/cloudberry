@@ -397,6 +397,11 @@ _bitmap_init(Relation indexrel, bool use_wal, bool for_empty)
 	else
 		_bitmap_create_lov_heapandindex(indexrel, &lovHeapOid, &lovIndexOid);
 
+	/* Do work that can fail before modifying either page. */
+	lovItem = _bitmap_formitem(0);
+	buf = ReadBufferExtended(indexrel, fork, P_NEW, RBM_NORMAL, NULL);
+	LockBuffer(buf, BUFFER_LOCK_EXCLUSIVE);
+
 	START_CRIT_SECTION();
 
 	MarkBufferDirty(metabuf);
@@ -414,8 +419,6 @@ _bitmap_init(Relation indexrel, bool use_wal, bool for_empty)
 		_bitmap_log_metapage(indexrel, fork, page);
 
 	/* allocate the first LOV page. */
-	buf = ReadBufferExtended(indexrel, fork, P_NEW, RBM_NORMAL, NULL);
-	LockBuffer(buf, BUFFER_LOCK_EXCLUSIVE);
 	_bitmap_init_lovpage(indexrel, buf);
 
 	MarkBufferDirty(buf);
@@ -423,7 +426,6 @@ _bitmap_init(Relation indexrel, bool use_wal, bool for_empty)
 	currLovPage = BufferGetPage(buf);
 
 	/* set the first item to support NULL value */
-	lovItem = _bitmap_formitem(0);
 	newOffset = OffsetNumberNext(PageGetMaxOffsetNumber(currLovPage));
 
 	/*

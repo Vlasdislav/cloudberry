@@ -90,16 +90,8 @@ static pg_noinline void mul_size_error(Size s1, Size s2) pg_attribute_noreturn()
  * an out-of-memory error will be escalated to a PANIC. To enforce that
  * rule, the allocation functions Assert that.
  */
-/*
- * GPDB_94_MERGE_FIXME: Disabled temporarily, we were unsafe things in GPDB.
- * Fix all the failures and re-enable this later.
- */
-#if 0
 #define AssertNotInCriticalSection(context) \
 	Assert(CritSectionCount == 0 || (context)->allowInCritSection)
-#else
-#define AssertNotInCriticalSection(context)
-#endif
 
 
 /*****************************************************************************

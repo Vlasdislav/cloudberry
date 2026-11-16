@@ -924,11 +924,14 @@ _bitmap_log_metapage(Relation rel, ForkNumber fork, Page page)
 {
 	BMMetaPage metapage = (BMMetaPage) PageGetContents(page);
 
-	xl_bm_metapage*		xlMeta;
+	union
+	{
+		xl_bm_metapage data;
+		char padding[MAXALIGN(sizeof(xl_bm_metapage))];
+	} xlMetaBuffer = {0};
+	xl_bm_metapage *xlMeta = &xlMetaBuffer.data;
 	XLogRecPtr			recptr;
 
-	xlMeta = (xl_bm_metapage *)
-		palloc(MAXALIGN(sizeof(xl_bm_metapage)));
 	xlMeta->bm_node = rel->rd_node;
 	xlMeta->bm_fork = fork;
 	xlMeta->bm_lov_heapId = metapage->bm_lov_heapId;
@@ -941,7 +944,6 @@ _bitmap_log_metapage(Relation rel, ForkNumber fork, Page page)
 	recptr = XLogInsert(RM_BITMAP_ID, XLOG_BITMAP_INSERT_META);
 
 	PageSetLSN(page, recptr);
-	pfree(xlMeta);
 }
 
 /*
